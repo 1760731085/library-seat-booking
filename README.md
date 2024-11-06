@@ -198,6 +198,7 @@
 ### 2. 创建 GitHub Actions 工作流文件
 
 在 `.github/workflows/` 目录下创建一个名为 `book_seat.yml` 的文件，定义 GitHub Actions 工作流，通过 `env` 关键字设置环境变量，将 GitHub Secrets 的值传递给你的脚本。
+> **注意:**  GitHub Actions 的调度程序（scheduler）使用 协调世界时（UTC） 作为时间基准，而不是你的本地时间 zone（如中国时间，UTC+8）。因为中国时间比 UTC 快 8 个小时，所以需要从中国时间的日期中"回拨"8个小时
 
 #### 示例 `book_seat.yml`：
 
@@ -207,10 +208,8 @@ name: Book and Sign Seats
 on:
   # 可自定义，运行签到脚本的时间要与info.py中的内容匹配
   schedule:
-    # 每天的 6:15 运行预约脚本
-    - cron: '15 6 * * *'
-    # 每天的 8:21、8:31、8:35、8:55、12:31、13:55、16:31、20:31运行签到脚本
-    - cron: '21,31,35,55 8,12,13,16,20 * * *'
+    - cron: '15 22 * * *'  # 中国时间每天 6:15 AM
+    - cron: '21,31,35,55 1,6,10 * * *'  # 中国时间 9点、14点和18点的第21、31、35和55分钟
   workflow_dispatch:
 
 jobs:
