@@ -2,8 +2,8 @@ name: Book and Sign Seats
 
 on:
   schedule:
-    - cron: '15 6 * * *'
-    - cron: '21,31,35,55 9,14,18 * * *'
+    - cron: '15 22 * * *'
+    - cron: '21,31,35,55 1,6,10 * * *'
   workflow_dispatch:
 
 jobs:
