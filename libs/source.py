@@ -170,10 +170,10 @@ class ZWYT(object):
         return res.json().get('data').get('accNo')
 
     def passwordReset(self):
-       """
-       密码重置
-       """
-       ...
+        """
+        密码重置
+        """
+        ...
 
     # 登录
     def login(self):
@@ -199,7 +199,7 @@ class ZWYT(object):
             '_eventId': 'submit',
         }
         url = self.urls['login_url']
-        res = self.rr.post(url=url, data=data, timeout=60)
+        res = self.rr.post(url=url, data=data, timeout=120)
 
         if re.findall('密码重置', res.text):
             self.passwordReset()
@@ -263,28 +263,20 @@ class ZWYT(object):
         utc_now = datetime.utcnow().replace(tzinfo=timezone.utc)  # UTC 时间
         SHA_TZ = timezone(timedelta(hours=8), name='Asia/Shanghai', )  # 上海市区, 也就是东八区，比 UTC 快 8 个小时
 
-        current_day = utc_now.astimezone(SHA_TZ)  # 今天的日期： 北京时间
-        next_day = current_day + timedelta(days=1)  # 明天的日期
+        next_day = utc_now.astimezone(SHA_TZ) + timedelta(days=1)  # 明天的日期
 
         # 获取 年、月、日
-        c_year, c_month, c_day = current_day.year, current_day.month, current_day.day
         n_year, n_month, n_day = next_day.year, next_day.month, next_day.day
 
         # 要返回的数据
         reserve_days = []
 
-        # 添加起始和结束时间
+        # 添加明天的起始和结束时间
         for period in self.periods:
-            reserve_days.extend([
-                {
-                    'start': f"{c_year}-{c_month}-{c_day} {period[0]}",  # 今天--起始时间
-                    'end': f"{c_year}-{c_month}-{c_day} {period[-1]}"  # 今天--结束时间
-                },
-                {
-                    'start': f"{n_year}-{n_month}-{n_day} {period[0]}",  # 明天--起始时间
-                    'end': f"{n_year}-{n_month}-{n_day} {period[-1]}"  # 明天--结束时间
-                }
-            ])
+            reserve_days.append({
+                'start': f"{n_year}-{n_month}-{n_day} {period[0]}",  # 明天--起始时间
+                'end': f"{n_year}-{n_month}-{n_day} {period[-1]}"  # 明天--结束时间
+            })
 
         return reserve_days
 
@@ -322,7 +314,8 @@ class ZWYT(object):
             }
 
             # 发起预约请求
-            res = self.rr.post(url=self.urls['reserve'], headers=self.headers, json=json_data, cookies=self.cookies, timeout=60)
+            res = self.rr.post(url=self.urls['reserve'], headers=self.headers, json=json_data, cookies=self.cookies,
+                               timeout=120)
 
             # 将服务器返回数据解析为 json
             res_json = res.json()
@@ -330,11 +323,13 @@ class ZWYT(object):
 
             # 预约成功
             if message == '新增成功':
-                logger.success(f"预约成功: {self.name} 预约了 {devName}: {json_data['resvBeginTime']} ~ {json_data['resvEndTime']}" )
+                logger.success(
+                    f"预约成功: {self.name} 预约了 {devName}: {json_data['resvBeginTime']} ~ {json_data['resvEndTime']}")
 
             # 该时间段有预约了
             elif re.findall('当前时段有预约', message):
-                logger.warning(f"{self.name} 这个时段已经有了预约: {json_data['resvBeginTime']} ~ {json_data['resvEndTime']}")
+                logger.warning(
+                    f"{self.name} 这个时段已经有了预约: {json_data['resvBeginTime']} ~ {json_data['resvEndTime']}")
 
             # 预约失败---可选择向微信推送预约失败的信息, 比如可以使用 pushplus 平台
             else:
@@ -357,7 +352,7 @@ class ZWYT(object):
         # 登录
         res1 = self.rr.post(url=lurl,
                             json={"devSn": devSn, "type": "1", "bind": 0, "loginType": 2},
-                            cookies=self.cookies, timeout=60)
+                            cookies=self.cookies, timeout=120)
 
         # 返回的json数据
         res1_data = res1.json()
@@ -382,7 +377,7 @@ class ZWYT(object):
 
         # 签到接口
         res2 = self.rr.post(
-            url=url, json={"resvId": resvId}, cookies=self.cookies, timeout=60)
+            url=url, json={"resvId": resvId}, cookies=self.cookies, timeout=120)
 
         # 获取返回的信息
         message = res2.json().get('message')

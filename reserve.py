@@ -3,6 +3,7 @@
 """
 from libs.info import infos
 from libs.source import ZWYT
+import time
 
 
 def main(*args, **kwargs):
@@ -15,6 +16,8 @@ def main(*args, **kwargs):
 
                 # 调用预约函数预约，传入预约座位号
                 yy.reserve(devName)
+
+                time.sleep(2)  # 增加2秒的延时，避免并发过多导致超时
             except Exception as e:
                 print(e)
                 if stu['pushplus']:
