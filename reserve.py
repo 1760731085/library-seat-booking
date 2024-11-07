@@ -18,10 +18,14 @@ def main(*args, **kwargs):
                 yy.reserve(devName)
 
                 time.sleep(2)  # 增加2秒的延时，避免并发过多导致超时
+            except httpx.TimeoutException as e:
+                print(f"座位 {devName} 预约超时，不推送消息。")
+                continue
+
             except Exception as e:
                 print(e)
                 if stu['pushplus']:
-                    yy.pushplus(f"{stu['name']} {devName} 预约失败", e)
+                    yy.pushplus(f"{stu['name']} {devName} 预约失败", e)  # 只有非超时异常才推送
                 continue
 
 
