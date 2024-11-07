@@ -17,8 +17,8 @@ def main(*args, **kwargs):
             yy.sign(stu['devName'][0])  # 只传入第一个设备号进行签到
         except Exception as e:
             print(e)
-            if stu['pushplus']:
-                yy.pushplus(f"{stu['name']} 签到失败", e)
+            # if stu['pushplus']:
+            #     yy.pushplus(f"{stu['name']} 签到失败", e)
             continue
 
 
