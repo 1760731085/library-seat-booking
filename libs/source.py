@@ -24,7 +24,7 @@ class ZWYT(object):
         self.periods = periods  # 预约时间段
         self.pushplus_token = pushplus_token  # pushplus 的 token
 
-        # url接口
+        # URL接口
         self.urls = {
             'login_url': '',  # 登录
             'reserve': 'http://libbooking.gzhu.edu.cn/ic-web/reserve',  # 预约
@@ -53,11 +53,11 @@ class ZWYT(object):
         }
 
         # 初始化请求连接对象
-        self.rr = httpx.Client()
+        self.rr = httpx.AsyncClient()  # 使用AsyncClient进行异步请求
 
         # 如果 logs 文件夹不存在则创建
         logDir = Path(__file__).parent.parent / 'logs'
-        if logDir.exists() is False:
+        if not logDir.exists():
             logDir.mkdir()
 
         # 日志文件用 年-月-日 命名
@@ -78,14 +78,12 @@ class ZWYT(object):
             },
         ])
 
-    # pushplus 推送消息到微信
-    def pushplus(self, title, content):
+    async def pushplus(self, title, content):
         """
         pushplus 推送消息到微信
         Args:
             title: 标题
             content: 消息内容
-
         Returns: 无
         """
         params = {
@@ -93,40 +91,124 @@ class ZWYT(object):
             "title": title,
             "content": content
         }
-        self.rr.get(url=self.urls['pushplus'], params=params)
+        await self.rr.get(url=self.urls['pushplus'], params=params)
 
-    # TODO: 整理请求为一个函数
-    def get_response(self, url, method, params, headers, data):
+    async def get_person_appAccNo(self):
         """
-        发起请求, 获取响应
-        url:
-        method:
-        params:
-        headers:
-        data:
-        返回数据:
+        获取用户的 appAccNo
         """
-        ...
+        # 请求接口
+        res = await self.rr.get(url=self.urls['userinfo'], cookies=self.cookies, timeout=60)
+        return res.json().get('data').get('accNo')
 
-    # TODO: 请求方式获取 roomId
-    def get_roomId(self):
+    async def login(self):
         """
-        获取 roomId
-        :return:
+        登录
         """
-        res = self.rr.get(url=self.urls['roomId'], headers=self.headers)
-        res = res.json()
+        if self.cookies['ic-cookie']:
+            return
 
-    # TODO: 请求方式获取 devId
-    def get_devId(self):
+        res = await self.rr.get(url=self.urls['login_url'], timeout=60)  # 请求登录url获取一些参数
+        html = etree.HTML(res.text)
+
+        lt = html.xpath(self.xpath_rules['lt'])[0]
+        execution = html.xpath(self.xpath_rules['execution'])[0]
+        rsa = RSA().strEnc(self.username + self.password + lt)  # 把密码和那些参数用RSA加密
+
+        data = {
+            'rsa': rsa,
+            'ul': len(self.username),
+            'pl': len(self.password),
+            'lt': lt,
+            'execution': execution,
+            '_eventId': 'submit',
+        }
+        url = self.urls['login_url']
+        res = await self.rr.post(url=url, data=data, timeout=60)
+
+        if re.findall('密码重置', res.text):
+            self.passwordReset()
+
+        location = str(res.headers.get('Location'))
+        ticket = re.findall('ticket=(.*)', location)[0]  # 获取ticket
+
+        url = f"""{re.findall('service=(.*)', url)[0]}?ticket={ticket}"""
+        url = unquote(url)
+        location = (await self.rr.get(url=url, timeout=60)).headers.get('Location')
+        location = unquote(location)
+
+        unitoken = re.findall('uniToken=(.*)', str(location))[0]  # 获取unitoken
+        uuid = re.findall('uuid=(.*?)&', str(location))[0]  # 获取 uuid
         params = {
-            "roomIds": "100647013",
-            "resvDates": "20230514",
-            "sysKind": "8"
+            "manager": "false",
+            "uuid": uuid,
+            "consoleType": "16",
+            "uniToken": unitoken
         }
 
-        res = self.rr.get(url=self.urls['reserve'], params=params, headers=self.headers, timeout=60)
-        json_data = res.json()
+        # 获取 ic-cookie
+        get_cookie_res = await self.rr.get(
+            url="http://libbooking.gzhu.edu.cn/ic-web//auth/token",
+            params=params,
+            headers=self.headers,
+            timeout=60
+        )
+
+        icc = get_cookie_res.headers.get('Set-Cookie')
+        self.cookies['ic-cookie'] = re.findall('ic-cookie=(.*?);', icc)[0]
+
+    async def reserve_seat(self, devName: str):
+        """
+        预约某个座位
+        """
+        self.resvDev = self.get_seat_resvDev_devSn(devName, 'reserve')
+        await self.login()  # 登录一次
+
+        appAccNo = await self.get_person_appAccNo()  # 获取用户 appAccNo
+        print('\n')  # 换行
+
+        for date in self.get_reserve_date():
+            json_data = {
+                "sysKind": 8,
+                "appAccNo": appAccNo,
+                "memberKind": 1,
+                "resvMember": [appAccNo],
+                "resvBeginTime": date['start'],
+                "resvEndTime": date['end'],
+                "testName": "",
+                "captcha": "",
+                "resvProperty": 0,
+                "resvDev": [self.resvDev],
+                "memo": ""
+            }
+
+            try:
+                res = await self.rr.post(url=self.urls['reserve'], headers=self.headers, json=json_data,
+                                         cookies=self.cookies, timeout=60)
+                res_json = res.json()
+                message = res_json.get('message')
+
+                # 预约成功
+                if message == '新增成功':
+                    logger.success(
+                        f"预约成功: {self.name} 预约了 {devName}: {json_data['resvBeginTime']} ~ {json_data['resvEndTime']}")
+
+                # 该时间段有预约了
+                elif '当前时段有预约' in message:
+                    logger.warning(
+                        f"{self.name} 这个时段已经有了预约: {json_data['resvBeginTime']} ~ {json_data['resvEndTime']}")
+
+                # 预约失败
+                else:
+                    logger.error(f"{self.name} 时间段: {json_data['resvBeginTime']} 预约失败 {message}")
+
+            except Exception as e:
+                logger.error(f"{self.name} 预约请求失败: {e}")
+
+            await asyncio.sleep(1)  # 每次请求后等待1秒
+
+    async def reserve(self, devNames: typing.List[str]):
+        await asyncio.gather(*(self.reserve_seat(devName) for devName in devNames))
 
     # 取对应座位的 resvDev、devSn
     def get_seat_resvDev_devSn(self, devName: str, tag: str):
@@ -143,7 +225,7 @@ class ZWYT(object):
         else:
             json_path = Path().cwd() / f'json/{filename.lower()}.json'  # 准备打开的 json 文件的路径, 先用小写
 
-            if json_path.exists() is False:
+            if not json_path.exists():
                 json_path = Path().cwd() / f'json/{filename.upper()}.json'  # 准备打开的 json 文件的路径, 再用大写
 
         # 打开对应的 json 文件
@@ -160,101 +242,6 @@ class ZWYT(object):
 
         return resvDev
 
-    # 获取用户 appAccNo
-    def get_person_appAccNo(self):
-        """
-        获取用户的 appAccNo
-        """
-        # 请求接口
-        res = self.rr.get(url=self.urls['userinfo'], cookies=self.cookies, timeout=60)
-        return res.json().get('data').get('accNo')
-
-    def passwordReset(self):
-       """
-       密码重置
-       """
-       ...
-
-    # 登录
-    def login(self):
-        """
-        登录
-        """
-        if self.cookies['ic-cookie']:
-            return
-
-        res = self.rr.get(url=self.urls['login_url'], timeout=60)  # 请求登录url获取一些参数
-        html = etree.HTML(res.text)
-
-        lt = html.xpath(self.xpath_rules['lt'])[0]
-        execution = html.xpath(self.xpath_rules['execution'])[0]
-        rsa = RSA().strEnc(self.username + self.password + lt)  # 把密码和那些参数用RSA加密
-
-        data = {
-            'rsa': rsa,
-            'ul': len(self.username),
-            'pl': len(self.password),
-            'lt': lt,
-            'execution': execution,
-            '_eventId': 'submit',
-        }
-        url = self.urls['login_url']
-        res = self.rr.post(url=url, data=data, timeout=60)
-
-        if re.findall('密码重置', res.text):
-            self.passwordReset()
-
-        location = str(res.headers.get('Location'))
-        ticket = re.findall('ticket=(.*)', location)[0]  # 获取ticket
-
-        url = f"""{re.findall('service=(.*)', url)[0]}?ticket={ticket}"""
-        url = unquote(url)
-        location = self.rr.get(url=url, timeout=60).headers.get('Location')
-        location = unquote(location)
-
-        unitoken = re.findall('uniToken=(.*)', str(location))[0]  # 获取unitoken
-        uuid = re.findall('uuid=(.*?)&', str(location))[0]  # 获取 uuid
-        params = {
-            "manager": "false",
-            "uuid": uuid,
-            "consoleType": "16",
-            "uniToken": unitoken
-        }
-
-        # 获取 ic-cookie
-        get_cookie_res = self.rr.get(
-            url="http://libbooking.gzhu.edu.cn/ic-web//auth/token",
-            params=params,
-            headers=self.headers,
-            timeout=60
-        )
-
-        icc = get_cookie_res.headers.get('Set-Cookie')
-        self.cookies['ic-cookie'] = re.findall('ic-cookie=(.*?);', icc)[0]
-
-    #  获取登录url
-    def get_login_url(self):
-        """
-        获取登录带参数的 登录 url
-        """
-        params = {
-            "finalAddress": "http://libbooking.gzhu.edu.cn",
-            "errPageUrl": "http://libbooking.gzhu.edu.cn/#/error",
-            "manager": "false",
-            "consoleType": "16"
-        }
-
-        # 从data里面获取一个url
-        url = self.urls['findaddress']
-        address = self.rr.get(url=url, params=params, timeout=60).json().get('data')
-
-        # 将上面获取到的url 作为请求参数
-        url = url = f"{self.urls['get_location']}?redirectUrl={address}"
-        res = self.rr.get(url=url, timeout=60)
-
-        self.urls['login_url'] = res.headers.get('Location')
-
-    # 获取预约日期
     def get_reserve_date(self) -> typing.List:
         """
         功能: 返回预约的日期和时间
@@ -278,69 +265,18 @@ class ZWYT(object):
             reserve_days.extend([
                 {
                     'start': f"{c_year}-{c_month}-{c_day} {period[0]}",  # 今天--起始时间
-                    'end': f"{c_year}-{c_month}-{c_day} {period[-1]}"  # 今天--结束时间
+                    'end': f"{c_year}-{c_month}-{c_day} {period[1]}"  # 今天--结束时间
                 },
                 {
                     'start': f"{n_year}-{n_month}-{n_day} {period[0]}",  # 明天--起始时间
-                    'end': f"{n_year}-{n_month}-{n_day} {period[-1]}"  # 明天--结束时间
+                    'end': f"{n_year}-{n_month}-{n_day} {period[1]}"  # 明天--结束时间
                 }
             ])
 
         return reserve_days
 
-    # 预约
-    def reserve(self, devName: str):
-        """
-        预约
-        """
-        # 获取所预约的座位编号
-        self.resvDev = self.get_seat_resvDev_devSn(devName, 'reserve')
+        # 签到
 
-        # 登录
-        self.get_login_url()
-        self.login()
-
-        # 获取用户的 appAccNo
-        appAccNo = self.get_person_appAccNo()
-
-        print('\n')  # 换行
-
-        # 遍历所有日期, 进行预约
-        for date in self.get_reserve_date():
-            json_data = {
-                "sysKind": 8,
-                "appAccNo": appAccNo,
-                "memberKind": 1,
-                "resvMember": [appAccNo],  # 读者个人编号
-                "resvBeginTime": date['start'],  # 预约起始时间
-                "resvEndTime": date['end'],  # 预约结束时间
-                "testName": "",
-                "captcha": "",
-                "resvProperty": 0,
-                "resvDev": [self.resvDev],  # 座位编号
-                "memo": ""
-            }
-
-            # 发起预约请求
-            res = self.rr.post(url=self.urls['reserve'], headers=self.headers, json=json_data, cookies=self.cookies, timeout=60)
-
-            # 将服务器返回数据解析为 json
-            res_json = res.json()
-            message = res_json.get('message')
-
-            # 预约成功
-            if message == '新增成功':
-                logger.success(f"预约成功: {self.name} 预约了 {devName}: {json_data['resvBeginTime']} ~ {json_data['resvEndTime']}" )
-
-            # 该时间段有预约了
-            elif re.findall('当前时段有预约', message):
-                logger.warning(f"{self.name} 这个时段已经有了预约: {json_data['resvBeginTime']} ~ {json_data['resvEndTime']}")
-
-            # 预约失败---可选择向微信推送预约失败的信息, 比如可以使用 pushplus 平台
-            else:
-                logger.error(f"{self.name} 时间段: {json_data['resvBeginTime']} 预约失败 {message}")
-
-    # 签到
     def sign(self, devName: str):
         """
         签到
