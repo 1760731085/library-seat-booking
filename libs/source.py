@@ -336,6 +336,65 @@ class ZWYT(object):
                 logger.error(f"{self.name} 时间段: {json_data['resvBeginTime']} 预约失败 {message}")
 
     # 签到
+    # def sign(self, devName: str):
+    #     """
+    #     签到
+    #     """
+    #     self.get_login_url()
+    #     self.login()
+    #
+    #     lurl = "http://libbooking.gzhu.edu.cn/ic-web/phoneSeatReserve/login"
+    #     url = "http://libbooking.gzhu.edu.cn/ic-web/phoneSeatReserve/sign"
+    #
+    #     # 获取签到用的 devSn
+    #     devSn = self.get_seat_resvDev_devSn(devName, 'sign')
+    #
+    #     # 登录
+    #     res1 = self.rr.post(url=lurl,
+    #                         json={"devSn": devSn, "type": "1", "bind": 0, "loginType": 2},
+    #                         cookies=self.cookies, timeout=120)
+    #
+    #     # 返回的json数据
+    #     res1_data = res1.json()
+    #
+    #     # 预约座位的编号不对
+    #     if res1_data.get('data') is None:
+    #         logger.warning(f"{self.name}" + f"{res1_data.get('message')}")
+    #
+    #         # 预约的不是当前设备, 则签到对应的座位
+    #         devName = re.findall("-(.*)处", res1_data.get('message'))[0]
+    #
+    #         # 调用签到函数进行签到，传入预约座位号
+    #         self.sign(devName)
+    #         return
+    #
+    #     # 暂无预约
+    #     if res1_data.get('data').get('reserveInfo') is None:
+    #         return
+    #
+    #     # 获取预约编号
+    #     resvId = res1_data.get('data').get('reserveInfo').get('resvId')
+    #
+    #     # 签到接口
+    #     res2 = self.rr.post(
+    #         url=url, json={"resvId": resvId}, cookies=self.cookies, timeout=120)
+    #
+    #     # 获取返回的信息
+    #     message = res2.json().get('message')
+    #
+    #     # 签到成功
+    #     if message == '操作成功':
+    #         logger.success(f"{self.name} 签到成功--{message}")
+    #
+    #     # 已经签到过
+    #     elif message == '用户已签到，请勿重复签到':
+    #         logger.warning(f'{self.name} {message}')
+    #
+    #     # 签到失败
+    #     else:
+    #         logger.error(f"{self.name}--签到失败--{message}")
+
+    # 签到
     def sign(self, devName: str):
         """
         签到
@@ -352,7 +411,7 @@ class ZWYT(object):
         # 登录
         res1 = self.rr.post(url=lurl,
                             json={"devSn": devSn, "type": "1", "bind": 0, "loginType": 2},
-                            cookies=self.cookies, timeout=120)
+                            cookies=self.cookies, timeout=60)
 
         # 返回的json数据
         res1_data = res1.json()
@@ -377,7 +436,7 @@ class ZWYT(object):
 
         # 签到接口
         res2 = self.rr.post(
-            url=url, json={"resvId": resvId}, cookies=self.cookies, timeout=120)
+            url=url, json={"resvId": resvId}, cookies=self.cookies, timeout=60)
 
         # 获取返回的信息
         message = res2.json().get('message')

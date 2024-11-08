@@ -6,6 +6,7 @@ from libs.source import ZWYT
 import time
 import httpx  # 导入 httpx 模块
 
+
 def main(*args, **kwargs):
     # 遍历 info 信息，获取每个用户的昵称、预约座位号、用户名、密码、时间段、推送token（推送可以为空）
     for stu in infos:
