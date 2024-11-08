@@ -18,7 +18,7 @@ def main(*args, **kwargs):
                 # 调用预约函数预约，传入预约座位号
                 yy.reserve(devName)
 
-                time.sleep(2)  # 增加2秒的延时，避免并发过多导致超时
+                time.sleep(5)  # 增加5秒的延时，避免并发过多导致超时
             except httpx.TimeoutException as e:
                 print(f"座位 {devName} 预约超时，不推送消息。")
                 continue
