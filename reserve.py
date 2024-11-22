@@ -10,7 +10,7 @@ def process_reservation(yy, devName):
     """
     try:
         yy.reserve(devName)
-        time.sleep(5)  # 增加5秒的延时，避免并发过多导致超时
+        time.sleep(3)  # 增加5秒的延时，避免并发过多导致超时
     except httpx.TimeoutException:
         print(f"座位 {devName} 预约超时，不推送消息。")
     except Exception as e:
