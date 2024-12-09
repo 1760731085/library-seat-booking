@@ -271,6 +271,10 @@ class ZWYT(object):
         # 要返回的数据
         reserve_days = []
 
+        if not self.periods or not all(isinstance(period, list) and len(period) > 0 for period in self.periods):
+            logger.error("self.periods 格式错误或为空，请检查输入的时间段")
+            return []
+
         # 添加明天的起始和结束时间
         for period in self.periods:
             reserve_days.append({
